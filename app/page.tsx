@@ -2,8 +2,7 @@
 
 import { useState } from "react";
 
-// ⚠️ Verificá el id vigente del plan gratuito en https://console.groq.com/docs/models
-// "llama-3.3-70b-versatile" lo pude confirmar por búsqueda; "qwen/qwen3.6-27b" NO.
+// Verificado contra /openai/v1/models de la cuenta.
 const MODEL = "qwen/qwen3.8-27b";
 const GROQ_URL = "https://api.groq.com/openai/v1/chat/completions";
 
@@ -12,20 +11,18 @@ type Message = { role: "user" | "assistant"; content: string };
 export default function ChatPage() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
+  const [loading, setLoading] = useState(false);
 
-  // async porque vamos a esperar la respuesta de la API
   async function handleSend() {
     const text = input.trim();
     if (!text) return;
 
     const userMessage: Message = { role: "user", content: text };
-    // OJO: construimos el historial nuevo acá, en una variable local.
-    // No podemos confiar en "messages" todavía porque setMessages es asíncrono
-    // y aún no incluye este mensaje.
     const newHistory = [...messages, userMessage];
 
-    setMessages(newHistory); // pintamos tu mensaje ya mismo
-    setInput("");            // limpiamos el campo
+    setMessages(newHistory);
+    setInput("");
+    setLoading(true);
 
     try {
       const apiKey = process.env.NEXT_PUBLIC_GROQ_API_KEY;
@@ -38,15 +35,24 @@ export default function ChatPage() {
         },
         body: JSON.stringify({
           model: MODEL,
-          // Enviamos TODO el historial: la API no guarda estado,
-          // el contexto lo manda el cliente en cada llamada.
           messages: newHistory.map((m) => ({ role: m.role, content: m.content })),
         }),
       });
 
+      // Si la API responde con un código != 2xx, lo capturamos acá
+      if (!res.ok) {
+        let detalle = "";
+        try {
+          const errorBody = await res.json();
+          detalle = errorBody?.error?.message ?? "";
+        } catch {
+          /* la respuesta de error no era JSON */
+        }
+        throw new Error(`Error ${res.status}${detalle ? `: ${detalle}` : ""}`);
+      }
+
       const data = await res.json();
 
-      // Sacamos el texto de la respuesta de la estructura que devuelve Groq
       const reply: Message = {
         role: "assistant",
         content: data.choices[0].message.content,
@@ -54,12 +60,15 @@ export default function ChatPage() {
 
       setMessages((prev) => [...prev, reply]);
     } catch (error) {
-      // Manejo básico por ahora; en la Fase 3 lo mejoramos
       console.error(error);
+      const mensaje =
+        error instanceof Error ? error.message : "Error inesperado.";
       setMessages((prev) => [
         ...prev,
-        { role: "assistant", content: "⚠️ Hubo un error al llamar a la API." },
+        { role: "assistant", content: `⚠️ ${mensaje}` },
       ]);
+    } finally {
+      setLoading(false);
     }
   }
 
@@ -94,6 +103,17 @@ export default function ChatPage() {
               </div>
             </div>
           ))}
+
+          {loading && (
+            <div className="flex justify-start">
+              <div className="max-w-[80%] rounded-xl px-3 py-2 bg-slate-700 text-slate-100">
+                <span className="block text-[10px] uppercase opacity-60 mb-1">
+                  IA
+                </span>
+                pensando…
+              </div>
+            </div>
+          )}
         </div>
 
         <div className="flex gap-2">
@@ -107,7 +127,8 @@ export default function ChatPage() {
           />
           <button
             onClick={handleSend}
-            className="bg-blue-600 hover:bg-blue-500 text-white font-semibold px-5 rounded-lg"
+            disabled={loading}
+            className="bg-blue-600 hover:bg-blue-500 text-white font-semibold px-5 rounded-lg disabled:opacity-50"
           >
             Enviar
           </button>
