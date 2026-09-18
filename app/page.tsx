@@ -1,14 +1,16 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 
 // Verificado contra /openai/v1/models de la cuenta.
 const MODEL = "qwen/qwen3.8-27b";
 const GROQ_URL = "https://api.groq.com/openai/v1/chat/completions";
 
+const LS_MESSAGES = "groq-chat-messages";
+const LS_STATS = "groq-chat-stats";
+
 type Message = { role: "user" | "assistant"; content: string };
 
-// Métricas acumuladas de la sesión
 type Stats = {
   totalPromptTokens: number;
   totalCompletionTokens: number;
@@ -32,6 +34,33 @@ export default function ChatPage() {
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [stats, setStats] = useState<Stats>(EMPTY_STATS);
+  const [isLoaded, setIsLoaded] = useState(false); // 🔑 interruptor anti-borrado
+
+  // 1) Al montar: cargamos de localStorage y recién ahí activamos el guardado
+  useEffect(() => {
+    try {
+      const savedMessages = localStorage.getItem(LS_MESSAGES);
+      const savedStats = localStorage.getItem(LS_STATS);
+      if (savedMessages) setMessages(JSON.parse(savedMessages));
+      if (savedStats) setStats(JSON.parse(savedStats));
+    } catch (e) {
+      console.error("No se pudo leer localStorage:", e);
+    } finally {
+      setIsLoaded(true); // desde acá sí se puede guardar
+    }
+  }, []);
+
+  // 2) Guardamos mensajes SOLO después de haber cargado
+  useEffect(() => {
+    if (!isLoaded) return;
+    localStorage.setItem(LS_MESSAGES, JSON.stringify(messages));
+  }, [messages, isLoaded]);
+
+  // 3) Guardamos métricas SOLO después de haber cargado
+  useEffect(() => {
+    if (!isLoaded) return;
+    localStorage.setItem(LS_STATS, JSON.stringify(stats));
+  }, [stats, isLoaded]);
 
   async function handleSend() {
     const text = input.trim();
@@ -44,7 +73,7 @@ export default function ChatPage() {
     setInput("");
     setLoading(true);
 
-    const startedAt = performance.now(); // para medir el tiempo de respuesta
+    const startedAt = performance.now();
 
     try {
       const apiKey = process.env.NEXT_PUBLIC_GROQ_API_KEY;
@@ -81,13 +110,11 @@ export default function ChatPage() {
       };
       setMessages((prev) => [...prev, reply]);
 
-      // ── Leemos el objeto usage y acumulamos las métricas ──
       const usage = data.usage ?? {};
       const promptTokens = usage.prompt_tokens ?? 0;
       const completionTokens = usage.completion_tokens ?? 0;
       const totalThisCall = usage.total_tokens ?? promptTokens + completionTokens;
 
-      // tokens/seg: Groq expone completion_time; si no, usamos el tiempo medido
       const completionTime =
         typeof usage.completion_time === "number"
           ? usage.completion_time
@@ -116,12 +143,27 @@ export default function ChatPage() {
     }
   }
 
+  function clearConversation() {
+    setMessages([]);
+    setStats(EMPTY_STATS);
+    localStorage.removeItem(LS_MESSAGES);
+    localStorage.removeItem(LS_STATS);
+  }
+
   return (
     <main className="min-h-screen bg-slate-900 text-slate-100 flex justify-center p-4">
       <div className="w-full max-w-2xl flex flex-col">
-        <h1 className="text-2xl font-bold mb-4">Habla con la Máquina</h1>
+        <div className="flex items-center justify-between mb-4">
+          <h1 className="text-2xl font-bold">Habla con la Máquina</h1>
+          <button
+            onClick={clearConversation}
+            disabled={loading}
+            className="bg-slate-700 hover:bg-slate-600 text-sm px-3 py-2 rounded-lg disabled:opacity-50"
+          >
+            Borrar conversación
+          </button>
+        </div>
 
-        {/* Panel de métricas de la sesión */}
         <div className="grid grid-cols-3 gap-2 mb-4">
           <Metric label="Tokens prompt" value={stats.totalPromptTokens} />
           <Metric label="Tokens completado" value={stats.totalCompletionTokens} />
@@ -131,10 +173,7 @@ export default function ChatPage() {
             label="Tiempo resp."
             value={stats.lastResponseMs ? `${stats.lastResponseMs} ms` : "—"}
           />
-          <Metric
-            label="Tokens/seg"
-            value={stats.lastTokensPerSec || "—"}
-          />
+          <Metric label="Tokens/seg" value={stats.lastTokensPerSec || "—"} />
         </div>
 
         <div className="flex-1 bg-slate-800 rounded-xl p-4 mb-4 min-h-[45vh] overflow-y-auto space-y-2">
@@ -198,7 +237,6 @@ export default function ChatPage() {
   );
 }
 
-// Componente chico para cada métrica del panel
 function Metric({ label, value }: { label: string; value: string | number }) {
   return (
     <div className="bg-slate-800 rounded-lg px-2 py-2 text-center">
