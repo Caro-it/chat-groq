@@ -32,10 +32,15 @@ Proyecto del bootcamp de Ingeniería de IA de 4Geeks Academy.
 ```
 4. Abrí http://localhost:3000
 
+
 ## Modelo
-El modelo se define en `app/page.tsx` (constante `MODEL`).
-Verificá la lista vigente del plan gratuito en
-https://console.groq.com/docs/models antes de entregar.
+La aplicación usa `qwen/qwen3.8-27b` del plan gratuito de Groq, definido en
+la constante `MODEL` de `app/page.tsx`.
+
+El identificador se verificó consultando el endpoint `/openai/v1/models` de
+la cuenta, ya que el catálogo de modelos de Groq cambia con el tiempo. Si el
+modelo dejara de estar disponible, basta con sustituir esa constante por otro
+id vigente de la lista.
 
 ## Entrega
 Repositorio en GitHub, según las instrucciones del instructor.

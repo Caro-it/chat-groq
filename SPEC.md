@@ -42,8 +42,7 @@ datos de la conversación (consumo de tokens y métricas del modelo).
 - El diseño visual no se evalúa: un layout funcional y legible es suficiente.
 
 ## Notas / decisiones abiertas
-- **Modelo:** el brief se contradice (menciona `qwen/qwen3.6-27b` y también
-  "Llama 3"). Se usará un id vigente del plan gratuito, verificado en la
-  consola de Groq antes de entregar.
+- **Modelo:** el brief menciona `qwen/qwen3.6-27b`. Se usará un id vigente 
+del plan gratuito, verificado en la consola de Groq antes de entregar.
 - **Seguridad:** `NEXT_PUBLIC_` expone la clave en el navegador; es lo que
   pide el brief para el prototipo. En producción se movería a un backend.
